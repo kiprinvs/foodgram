@@ -36,7 +36,7 @@ class Recipe(models.Model):
     )
     tags = models.ManyToManyField(
         'Tag',
-        #through='RecipeTag',
+        through='RecipeTag',
         verbose_name='Теги',
         related_name='recipes'
     )
@@ -59,8 +59,8 @@ class Tag(models.Model):
         unique=True,
     )
 
-    #def __str__(self):
-    #    return self.name
+    def __str__(self):
+        return self.name
 
 
 class Ingredient(models.Model):
