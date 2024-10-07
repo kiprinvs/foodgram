@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
+from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
@@ -14,9 +15,32 @@ User = get_user_model()
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ('tags__slug',)
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        author_id = self.request.query_params.get('author', None)
+        tags = self.request.query_params.getlist('tags')
+
+        if author_id is not None:
+            queryset = queryset.filter(author__id=author_id)
+
+        if tags:
+            queryset = queryset.filter(tags__slug__in=tags).distinct()
+
+        return queryset
+
+    def destroy(self, request, pk=None):
+        recipe = self.get_object()
+        if recipe.author != request.user:
+            return Response({'detail': 'У вас нет прав для удаления этого рецепта.'}, status=status.HTTP_403_FORBIDDEN)
+
+        recipe.delete()  # Удаляем рецепт
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
@@ -37,13 +61,7 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
 
-    #def get_serializer_class(self):
-    #    print('!!!!!!!!!!!!!!!!!!!')
-    #    if self.action in ('list', 'retrieve'):
-    #        return UserSerializer
-    #    return UserCreateSerializer
-
-    @action(detail=False, permission_classes=(IsAuthenticated,))
+    @action(detail=False, url_path='me', permission_classes=(IsAuthenticated,))
     def me(self, request):
         print("вызов me")
         serializer = UserSerializer(
@@ -70,3 +88,9 @@ class UserViewSet(viewsets.ModelViewSet):
         user.avatar = None
         user.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def retrieve(self, request, pk=None):
+        print(f"Retrieve method called for user ID: {pk}")  # Отладка
+        user = get_object_or_404(User, id=pk)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
