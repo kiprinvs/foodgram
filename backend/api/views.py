@@ -1,13 +1,15 @@
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
+from djoser.views import UserViewSet as DjUserViewSet
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 from recipes.models import Ingredient, Recipe, Tag
-from .serializers import AvatarUserSerializer, IngredientSerializer, RecipeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer
+from users.models import Subscribe
+from .serializers import AvatarUserSerializer, IngredientSerializer, RecipeSerializer, SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -23,8 +25,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        author_id = self.request.query_params.get('author', None)
-        tags = self.request.query_params.getlist('tags')
+        author_id = self.request.GET.get('author', None)
+        tags = self.request.GET.getlist('tags')
 
         if author_id is not None:
             queryset = queryset.filter(author__id=author_id)
@@ -36,10 +38,14 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, pk=None):
         recipe = self.get_object()
-        if recipe.author != request.user:
-            return Response({'detail': 'У вас нет прав для удаления этого рецепта.'}, status=status.HTTP_403_FORBIDDEN)
 
-        recipe.delete()  # Удаляем рецепт
+        if recipe.author != request.user:
+            return Response(
+                {'detail': 'У вас нет прав для удаления этого рецепта.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        recipe.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -83,14 +89,70 @@ class UserViewSet(viewsets.ModelViewSet):
     @update_avatar.mapping.delete
     def delete_avatar(self, request):
         user = request.user
+
         if user.avatar:
             user.avatar.delete()
-        user.avatar = None
-        user.save()
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    def retrieve(self, request, pk=None):
-        print(f"Retrieve method called for user ID: {pk}")  # Отладка
-        user = get_object_or_404(User, id=pk)
-        serializer = UserSerializer(user)
-        return Response(serializer.data)
+    @action(detail=True, methods=['post'], url_path='subscribe',
+            permission_classes=(IsAuthenticated,))
+    def subscribe(self, request, pk=None):
+        subscribed_user = get_object_or_404(User, id=pk)
+        user = request.user
+
+        if user == subscribed_user:
+            return Response(
+                {'detail': 'Нельзя подписаться на самого себя.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if Subscribe.objects.filter(
+            user=user, subscribed_user=subscribed_user
+        ).exists():
+            return Response(
+                {'detail': 'Вы уже подписаны на этого пользователя.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        Subscribe.objects.create(
+            user=user, subscribed_user=subscribed_user
+        )
+        serializer = SubscribeSerializer(
+            subscribed_user, context={'request': request}
+        )
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED
+        )
+
+    @subscribe.mapping.delete
+    def unsubscribe(self, request, pk=None):
+        subscribed_user = get_object_or_404(User, id=pk)
+        subscription = Subscribe.objects.filter(
+            user=request.user, subscribed_user=subscribed_user
+        ).first()
+
+        if subscription:
+            subscription.delete()
+            return Response(
+                {'detail': 'Вы отписались от пользователя.'},
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        return Response(
+            {'detail': 'Вы не подписаны на этого пользователя.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    @action(
+        detail=False,
+        permission_classes=(IsAuthenticated,)
+    )
+    def subscriptions(self, request):
+        subscriptions = Subscribe.objects.filter(user=request.user)
+        following_users = [sub.subscribed_user for sub in subscriptions]
+        page = self.paginate_queryset(following_users)
+        serializer = SubscribeSerializer(
+            page, many=True, context={'request': request}
+        )
+        return self.get_paginated_response(serializer.data)

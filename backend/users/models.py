@@ -60,33 +60,33 @@ class User(AbstractUser):
         )
 
 
-class Follow(models.Model):
+class Subscribe(models.Model):
     """Модель подписки."""
 
     user = models.ForeignKey(
         User,
         verbose_name='Подписчик',
         on_delete=models.CASCADE,
-        related_name='followers',
+        related_name='subscribers',
     )
-    following = models.ForeignKey(
+    subscribed_user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='follows',
+        related_name='subscriptions',
         verbose_name='Подписка'
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'following'],
-                name='unique_user_following'
+                fields=['user', 'subscribed_user'],
+                name='unique_user_subscription'
             ),
             models.CheckConstraint(
-                check=~models.Q(user=models.F('following')),
-                name='%(app_label)s_%(class)s_prevent_self_follow',
+                check=~models.Q(user=models.F('subscribed_user')),
+                name='%(app_label)s_%(class)s_prevent_self_subscribe',
             )
         ]
 
     def __str__(self):
-        return f'{self.user} - {self.following}'
+        return f'{self.user} - {self.subscribed_user}'

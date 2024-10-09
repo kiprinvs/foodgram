@@ -4,14 +4,16 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
-#from djoser.serializers import UserCreateSerializer, UserSerializer
+# from djoser.serializers import UserCreateSerializer, UserSerializer
 from djoser.serializers import UserSerializer as DjoserUserSerializer
 from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from recipes.models import (
     Favorite, Ingredient, RecipeIngredient, Recipe, RecipeTag, ShoppingList, Tag
 )
+from users.models import Subscribe
 from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
 
 User = get_user_model()
@@ -38,35 +40,45 @@ class AvatarUserSerializer(serializers.ModelSerializer):
 
 class UserSerializer(DjoserUserSerializer):
     avatar = Base64ImageField(required=False)
+    is_subscribed = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
         fields = ('email', 'id', 'username', 'first_name',
-                  'last_name', 'avatar')
+                  'last_name', 'is_subscribed', 'avatar')
 
     def validate(self, data):
-        print(data)
         user_by_email = User.objects.filter(
             email=data['email']
         ).first()
-        print(user_by_email)
         user_by_username = User.objects.filter(
             username=data['username']
         ).first()
-        print(user_by_username)
+    
         if user_by_email != user_by_username:
             error_msg = {}
             if user_by_email is not None:
                 error_msg['email'] = (
                     'Пользователь с таким email уже существует.'
                 )
-                print("Email error:", error_msg['email'])
+
             if user_by_username is not None:
                 error_msg['username'] = (
                     'Пользователь с таким username уже существует.'
                 )
             raise serializers.ValidationError(error_msg)
+
         return data
+
+    def get_is_subscribed(self, subscribed_user):
+        user = self.context.get('request').user
+
+        if not user.is_authenticated:
+            return False
+
+        return Subscribe.objects.filter(
+            user=user, subscribed_user=subscribed_user
+        ).exists()
 
 
 class UserCreateSerializer(DjoserUserCreateSerializer):
@@ -75,7 +87,7 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
     username = serializers.CharField(
         max_length=MAX_LENGTH_NAME,
         required=True,
-        # validators=(UnicodeUsernameValidator(),),
+        validators=(UnicodeUsernameValidator(),),
     )
 
     class Meta:
@@ -126,7 +138,9 @@ class CreateRecipeIngredientSerializer(serializers.ModelSerializer):
 
     def validate_id(self, value):
         if not Ingredient.objects.filter(id=value).exists():
-            raise serializers.ValidationError(f"Ингредиент с id {value} не существует.")
+            raise serializers.ValidationError(
+                f"Ингредиент с id {value} не существует."
+            )
         return value
 
 
@@ -169,11 +183,9 @@ class RecipeSerializer(serializers.ModelSerializer):
         read_only_fields = ('author',)
 
     def create(self, validated_data):
-        print("validated_data", validated_data)
         tags_data = validated_data.pop('tags')
         ingredients_data = validated_data.pop('recipeingredients')
         recipe = Recipe.objects.create(**validated_data)
-        print('tags', tags_data, 'ingredients', ingredients_data)
 
         for tag in tags_data:
             recipe.tags.add(tag)
@@ -191,6 +203,39 @@ class RecipeSerializer(serializers.ModelSerializer):
                     amount=amount
                 )
         return recipe
+
+    def update(self, instance, validated_data):
+        instance.name = validated_data.get('name', instance.name)
+        instance.image = validated_data.get('image', instance.image)
+        instance.description = validated_data.get(
+            'description', instance.description
+        )
+        instance.cooking_time = validated_data.get(
+            'cooking_time', instance.cooking_time
+        )
+
+        if 'tags' in validated_data:
+            tags_data = validated_data.pop('tags')
+            instance.tags.clear()
+            for tag in tags_data:
+                instance.tags.add(tag)
+
+        if 'recipeingredients' in validated_data:
+            ingredients_data = validated_data.pop('recipeingredients')
+            instance.recipeingredients.all().delete()
+
+            for ingredient_data in ingredients_data:
+                ingredient_id = ingredient_data['id']
+                amount = ingredient_data['amount']
+                ingredient = get_object_or_404(Ingredient, id=ingredient_id)
+                RecipeIngredient.objects.create(
+                    recipe=instance,
+                    ingredient=ingredient,
+                    amount=amount
+                )
+
+        instance.save()
+        return instance
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -212,3 +257,52 @@ class RecipeSerializer(serializers.ModelSerializer):
         representation['tags'] = tags_info
         representation['ingredients'] = ingredients_info
         return representation
+
+
+class SubscribeSerializer(UserSerializer):
+    recipes = serializers.SerializerMethodField()
+    recipes_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            'email', 'id', 'username', 'first_name', 'last_name',
+            'is_subscribed', 'avatar', 'recipes', 'recipes_count'
+        )
+
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Subscribe.objects.all(),
+                fields=('user', 'subscribed_user'),
+                message='Нельзя подписаться дважды.'
+            )
+        ]
+
+    def validate_subscribed_user(self, subscribed_user):
+
+        if self.context.get('request').user == subscribed_user:
+            raise serializers.ValidationError(
+                'Нельзя подписаться на самого себя.'
+            )
+
+        return subscribed_user
+
+    def get_recipes_count(self, subscribed_user):
+        return Recipe.objects.filter(author=subscribed_user).count()
+
+    def get_recipes(self, subscribed_user):
+        request = self.context.get('request')
+        recipes_limit = request.GET.get('recipes_limit')
+        recipes = Recipe.objects.filter(author=subscribed_user)
+        if recipes_limit:
+            recipes = recipes[:int(recipes_limit)]
+        serializer = RecipeSubscribeSerializer(recipes, many=True)
+        return serializer.data
+
+
+class RecipeSubscribeSerializer(serializers.ModelSerializer):
+    image = Base64ImageField()
+
+    class Meta:
+        model = Recipe
+        fields = ('id', 'name', 'image', 'cooking_time')
