@@ -54,7 +54,7 @@ class UserSerializer(DjoserUserSerializer):
         user_by_username = User.objects.filter(
             username=data['username']
         ).first()
-    
+
         if user_by_email != user_by_username:
             error_msg = {}
             if user_by_email is not None:
@@ -173,12 +173,13 @@ class RecipeSerializer(serializers.ModelSerializer):
     ingredients = CreateRecipeIngredientSerializer(
         many=True, source='recipeingredients'
     )
+    is_favorited = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipe
         fields = (
             'id', 'tags', 'author', 'ingredients', 'name',
-            'image', 'text', 'cooking_time'
+            'image', 'text', 'cooking_time', 'is_favorited'
         )
         read_only_fields = ('author',)
 
@@ -237,6 +238,12 @@ class RecipeSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+    def get_is_favorited(self, recipe):
+        user = self.context.get('request').user
+        if user.is_authenticated:
+            return Favorite.objects.filter(user=user, recipe=recipe).exists()
+        return False
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         tags_info = TagSerializer(instance.tags, many=True).data
@@ -269,7 +276,6 @@ class SubscribeSerializer(UserSerializer):
             'email', 'id', 'username', 'first_name', 'last_name',
             'is_subscribed', 'avatar', 'recipes', 'recipes_count'
         )
-
         validators = [
             UniqueTogetherValidator(
                 queryset=Subscribe.objects.all(),
@@ -306,3 +312,15 @@ class RecipeSubscribeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Recipe
         fields = ('id', 'name', 'image', 'cooking_time')
+
+
+class FavoriteSerializer(serializers.ModelSerializer):
+    recipe = RecipeSubscribeSerializer(read_only=True)
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Favorite
+        fields = ('id', 'user', 'recipe')
+
+    def create(self, validated_data):
+        return super().create(validated_data)

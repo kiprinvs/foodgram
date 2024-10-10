@@ -7,9 +7,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
-from recipes.models import Ingredient, Recipe, Tag
+from recipes.models import Ingredient, Recipe, Tag, Favorite
 from users.models import Subscribe
-from .serializers import AvatarUserSerializer, IngredientSerializer, RecipeSerializer, SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer
+from .serializers import (
+    AvatarUserSerializer, IngredientSerializer, RecipeSerializer, RecipeSubscribeSerializer,
+    SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer,
+    FavoriteSerializer,
+)
 
 User = get_user_model()
 
@@ -27,6 +31,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         author_id = self.request.GET.get('author', None)
         tags = self.request.GET.getlist('tags')
+        is_favorited = self.request.GET.get('is_favorited', None)
 
         if author_id is not None:
             queryset = queryset.filter(author__id=author_id)
@@ -34,10 +39,18 @@ class RecipeViewSet(viewsets.ModelViewSet):
         if tags:
             queryset = queryset.filter(tags__slug__in=tags).distinct()
 
+        if is_favorited:
+            user = self.request.user
+
+            favorite_recipe_ids = Favorite.objects.filter(
+                user=user
+            ).values_list('recipe_id')
+            queryset = queryset.filter(id__in=favorite_recipe_ids)
+
         return queryset
 
     def destroy(self, request, pk=None):
-        recipe = self.get_object()
+        recipe = get_object_or_404(Recipe, id=pk)
 
         if recipe.author != request.user:
             return Response(
@@ -47,6 +60,41 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         recipe.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(
+        detail=True, methods=('post', 'delete'),
+        permission_classes=(IsAuthenticated,)
+    )
+    def favorite(self, request, pk):
+        user = request.user
+        recipe = get_object_or_404(Recipe, pk=pk)
+
+        if request.method == 'POST':
+            if Favorite.objects.filter(user=user, recipe=recipe).exists():
+                return Response(
+                    {'detail': 'Нельзя добавить в избранное дважды.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            favorite = Favorite.objects.create(user=user, recipe=recipe)
+            serializer = RecipeSubscribeSerializer(
+                recipe, context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        if request.method == 'DELETE':
+            favorite = Favorite.objects.filter(
+                user=user, recipe=recipe
+            ).first()
+            if favorite:
+                favorite.delete()
+                return Response(
+                    {'detail': 'Вы убрали рецепт из избранного.'},
+                    status=status.HTTP_204_NO_CONTENT
+                )
+            return Response(
+                {'detail': 'Этого рецепта нет в избранном.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
