@@ -145,7 +145,7 @@ class Favorite(models.Model):
 class ShoppingList(models.Model):
     """Модель списка покупок."""
 
-    user = user = models.ForeignKey(
+    user = models.ForeignKey(
         User,
         verbose_name='Пользователь',
         on_delete=models.CASCADE,

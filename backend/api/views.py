@@ -1,5 +1,7 @@
+import os
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from djoser.views import UserViewSet as DjUserViewSet
 from rest_framework import status, viewsets
@@ -7,12 +9,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
-from recipes.models import Ingredient, Recipe, Tag, Favorite
+from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingList, RecipeIngredient
 from users.models import Subscribe
 from .serializers import (
     AvatarUserSerializer, IngredientSerializer, RecipeSerializer, RecipeSubscribeSerializer,
     SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer,
-    FavoriteSerializer,
+    
 )
 
 User = get_user_model()
@@ -32,6 +34,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         author_id = self.request.GET.get('author', None)
         tags = self.request.GET.getlist('tags')
         is_favorited = self.request.GET.get('is_favorited', None)
+        is_in_shopping_cart = self.request.GET.get('is_in_shopping_cart', None)
 
         if author_id is not None:
             queryset = queryset.filter(author__id=author_id)
@@ -41,11 +44,17 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         if is_favorited:
             user = self.request.user
-
             favorite_recipe_ids = Favorite.objects.filter(
                 user=user
             ).values_list('recipe_id')
             queryset = queryset.filter(id__in=favorite_recipe_ids)
+
+        if is_in_shopping_cart:
+            user = self.request.user
+            shopping_cart_recipe_ids = ShoppingList.objects.filter(
+                user=user
+            ).values_list('recipe_id')
+            queryset = queryset.filter(id__in=shopping_cart_recipe_ids)
 
         return queryset
 
@@ -70,11 +79,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
         recipe = get_object_or_404(Recipe, pk=pk)
 
         if request.method == 'POST':
+
             if Favorite.objects.filter(user=user, recipe=recipe).exists():
                 return Response(
                     {'detail': 'Нельзя добавить в избранное дважды.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
             favorite = Favorite.objects.create(user=user, recipe=recipe)
             serializer = RecipeSubscribeSerializer(
                 recipe, context={'request': request}
@@ -85,16 +96,94 @@ class RecipeViewSet(viewsets.ModelViewSet):
             favorite = Favorite.objects.filter(
                 user=user, recipe=recipe
             ).first()
+
             if favorite:
                 favorite.delete()
                 return Response(
                     {'detail': 'Вы убрали рецепт из избранного.'},
                     status=status.HTTP_204_NO_CONTENT
                 )
+
             return Response(
                 {'detail': 'Этого рецепта нет в избранном.'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=True, methods=('post', 'delete'),
+            permission_classes=(IsAuthenticated,))
+    def shopping_cart(self, request, pk):
+        user = request.user
+        recipe = get_object_or_404(Recipe, pk=pk)
+
+        if request.method == 'POST':
+
+            if ShoppingList.objects.filter(user=user, recipe=recipe).exists():
+                return Response(
+                    {'detail': 'Вы уже добавили этот рецепт в список покупок'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            shopping_cart = ShoppingList.objects.create(
+                user=user, recipe=recipe
+            )
+            serializer = RecipeSubscribeSerializer(
+                recipe, context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        if request.method == 'DELETE':
+            shopping_cart = ShoppingList.objects.filter(
+                user=user, recipe=recipe
+            ).first()
+
+            if shopping_cart:
+                shopping_cart.delete()
+                return Response(
+                    {'detai': 'Вы удалили рецепт из списка покупок.'},
+                    status=status.HTTP_204_NO_CONTENT
+                )
+
+            return Response(
+                {'detail': 'Этого рецепта нет в списке покупок.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=False, permission_classes=[IsAuthenticated])
+    def download_shopping_cart(self, request):
+        """Скачать список покупок текущего пользователя в текстовом формате."""
+        user = request.user
+        shopping_list = ShoppingList.objects.filter(user=user)
+        ingredients = RecipeIngredient.objects.filter(
+            recipe__in=shopping_list.values_list('recipe', flat=True)
+        )
+        ingredient_count = {}
+
+        for recipe_ingredient in ingredients:
+            ingredient_name = recipe_ingredient.ingredient.name
+            measurement_unit = recipe_ingredient.ingredient.measurement_unit
+            amount = recipe_ingredient.amount
+
+            if ingredient_name in ingredient_count:
+                ingredient_count[ingredient_name]['amount'] += amount
+            else:
+                ingredient_count[ingredient_name] = {
+                    'measurement_unit': measurement_unit,
+                    'amount': amount
+                }
+
+        shopping_list_text = ''
+
+        for name, data in ingredient_count.items():
+            shopping_list_text += (
+                f'{name} ({data["measurement_unit"]}) - '
+                f'{data["amount"]}\n'
+            )
+
+        response = HttpResponse(shopping_list_text, content_type='text/plain')
+        response['Content-Disposition'] = (
+            'attachment; filename="shopping_cart.txt"'
+        )
+        return response
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):

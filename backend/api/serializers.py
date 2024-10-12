@@ -174,12 +174,13 @@ class RecipeSerializer(serializers.ModelSerializer):
         many=True, source='recipeingredients'
     )
     is_favorited = serializers.SerializerMethodField()
+    is_in_shopping_cart = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipe
         fields = (
-            'id', 'tags', 'author', 'ingredients', 'name',
-            'image', 'text', 'cooking_time', 'is_favorited'
+            'id', 'tags', 'author', 'ingredients', 'is_favorited',
+            'is_in_shopping_cart', 'name', 'image', 'text', 'cooking_time'
         )
         read_only_fields = ('author',)
 
@@ -242,6 +243,14 @@ class RecipeSerializer(serializers.ModelSerializer):
         user = self.context.get('request').user
         if user.is_authenticated:
             return Favorite.objects.filter(user=user, recipe=recipe).exists()
+        return False
+
+    def get_is_in_shopping_cart(self, recipe):
+        user = self.context.get('request').user
+        if user.is_authenticated:
+            return ShoppingList.objects.filter(
+                user=user, recipe=recipe
+            ).exists()
         return False
 
     def to_representation(self, instance):
