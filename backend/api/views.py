@@ -1,20 +1,23 @@
-import os
+import random
+import string
+
 from django.contrib.auth import get_user_model
+from django.contrib.sites.shortcuts import get_current_site
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
+
 from djoser.views import UserViewSet as DjUserViewSet
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
-from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingList, RecipeIngredient
+from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingList, RecipeIngredient, ShortLink
 from users.models import Subscribe
 from .serializers import (
     AvatarUserSerializer, IngredientSerializer, RecipeSerializer, RecipeSubscribeSerializer,
-    SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer,
-    
+    SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer, ShortLinkSerializer
 )
 
 User = get_user_model()
@@ -185,6 +188,31 @@ class RecipeViewSet(viewsets.ModelViewSet):
         )
         return response
 
+    @action(detail=True, url_path='get-link')
+    def get_link(self, request, pk):
+        recipe = get_object_or_404(Recipe, id=pk)
+        short_link = ShortLink.objects.filter(recipe=recipe).first()
+
+        if not short_link:
+            short_url = self.generate_unique_short_url()
+            short_link = ShortLink.objects.create(
+                recipe=recipe, short_url=short_url
+            )
+
+        serializer = ShortLinkSerializer(
+            short_link, context={'request': request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def generate_unique_short_url(self):
+        while True:
+            length = 6
+            short_url = ''.join(random.choices(
+                string.ascii_letters + string.digits, k=length)
+            )
+            if not ShortLink.objects.filter(short_url=short_url).exists():
+                return short_url
+
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tag.objects.all()
@@ -293,3 +321,13 @@ class UserViewSet(viewsets.ModelViewSet):
             page, many=True, context={'request': request}
         )
         return self.get_paginated_response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def redirect_short_link(request, short_url):
+    short_link = get_object_or_404(ShortLink, short_url=short_url)
+    host = get_current_site(request)
+    recipe_id = short_link.recipe.pk
+    redirect_url = f"http://{host.domain}/recipes/{recipe_id}"
+    return redirect(redirect_url)

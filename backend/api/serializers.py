@@ -2,6 +2,7 @@ import base64
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
 # from djoser.serializers import UserCreateSerializer, UserSerializer
@@ -11,7 +12,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from recipes.models import (
-    Favorite, Ingredient, RecipeIngredient, Recipe, RecipeTag, ShoppingList, Tag
+    Favorite, Ingredient, RecipeIngredient, Recipe, RecipeTag, ShoppingList, Tag, ShortLink
 )
 from users.models import Subscribe
 from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
@@ -333,3 +334,17 @@ class FavoriteSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return super().create(validated_data)
+
+
+class ShortLinkSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ShortLink
+        fields = ('short_url',)
+
+    def to_representation(self, instance):
+        """Преобразует ключи в формат с дефисом."""
+        request = self.context.get('request')
+        host = get_current_site(request)
+        short_link = f"http://{host.domain}/s/{instance.short_url}"
+        return {'short-link': short_link}

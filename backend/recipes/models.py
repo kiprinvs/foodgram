@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import UniqueConstraint
+from django.urls import reverse
 
 User = get_user_model()
 
@@ -45,6 +46,9 @@ class Recipe(models.Model):
 
     class Meta:
         ordering = ('-created_at',)
+
+    def get_absolute_url(self):
+        return reverse('recipes-detail', kwargs={'pk': self.pk})
 
     def __str__(self):
         return self.name
@@ -178,3 +182,14 @@ class RecipeTag(models.Model):
         Tag,
         on_delete=models.CASCADE
     )
+
+
+class ShortLink(models.Model):
+    recipe = models.OneToOneField(
+        Recipe, on_delete=models.CASCADE,
+        related_name='short_link'
+    )
+    short_url = models.CharField(max_length=6, unique=True)
+
+    def __str__(self):
+        return f'{self.recipe.name}: {self.short_url}'

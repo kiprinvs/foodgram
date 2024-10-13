@@ -10,17 +10,20 @@ app_name = 'api'
 router_v1 = DefaultRouter()
 
 router_v1_urls = [
-    router_v1.register('recipes', RecipeViewSet),
+    router_v1.register('recipes', RecipeViewSet, basename='recipes'),
     router_v1.register('tags', TagViewSet),
     router_v1.register('ingredients', IngredientViewSet),
     router_v1.register('users', UserViewSet, basename='users'),
 ]
 
 urlpatterns = [
+
     path('', include(router_v1.urls)),
     path('', include('djoser.urls')),
     path('auth/', include('djoser.urls.authtoken')),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(
+        settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
+    )
