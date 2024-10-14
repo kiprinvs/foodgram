@@ -1,6 +1,7 @@
 import base64
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
@@ -48,29 +49,6 @@ class UserSerializer(DjoserUserSerializer):
         fields = ('email', 'id', 'username', 'first_name',
                   'last_name', 'is_subscribed', 'avatar')
 
-    def validate(self, data):
-        user_by_email = User.objects.filter(
-            email=data['email']
-        ).first()
-        user_by_username = User.objects.filter(
-            username=data['username']
-        ).first()
-
-        if user_by_email != user_by_username:
-            error_msg = {}
-            if user_by_email is not None:
-                error_msg['email'] = (
-                    'Пользователь с таким email уже существует.'
-                )
-
-            if user_by_username is not None:
-                error_msg['username'] = (
-                    'Пользователь с таким username уже существует.'
-                )
-            raise serializers.ValidationError(error_msg)
-
-        return data
-
     def get_is_subscribed(self, subscribed_user):
         user = self.context.get('request').user
 
@@ -98,27 +76,23 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
         )
 
     def validate(self, data):
-        print(data)
-        user_by_email = User.objects.filter(
-            email=data['email']
-        ).first()
-        print(user_by_email)
-        user_by_username = User.objects.filter(
-            username=data['username']
-        ).first()
-        print(user_by_username)
-        if user_by_email != user_by_username:
-            error_msg = {}
-            if user_by_email is not None:
-                error_msg['email'] = (
-                    'Пользователь с таким email уже существует.'
-                )
-                print("Email error:", error_msg['email'])
-            if user_by_username is not None:
-                error_msg['username'] = (
-                    'Пользователь с таким username уже существует.'
-                )
+        user_by_email = User.objects.filter(email=data['email']).first()
+        user_by_username = User.objects.filter(username=data['username']).first()
+        error_msg = {}
+
+        if user_by_email is not None:
+            error_msg['email'] = (
+                'Пользователь с таким email уже существует.'
+            )
+
+        if user_by_username is not None:
+            error_msg['username'] = (
+                'Пользователь с таким username уже существует.'
+            )
+
+        if error_msg:
             raise serializers.ValidationError(error_msg)
+
         return data
 
 
@@ -348,3 +322,20 @@ class ShortLinkSerializer(serializers.ModelSerializer):
         host = get_current_site(request)
         short_link = f"http://{host.domain}/s/{instance.short_url}"
         return {'short-link': short_link}
+
+
+class CustomTokenCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField()
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+
+        user = authenticate(username=email, password=password)
+
+        if user is None:
+            raise serializers.ValidationError('Неправильный email или пароль.')
+
+        attrs['user'] = user
+        return attrs
