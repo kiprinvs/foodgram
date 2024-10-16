@@ -77,7 +77,9 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
 
     def validate(self, data):
         user_by_email = User.objects.filter(email=data['email']).first()
-        user_by_username = User.objects.filter(username=data['username']).first()
+        user_by_username = User.objects.filter(
+            username=data['username']
+        ).first()
         error_msg = {}
 
         if user_by_email is not None:
@@ -168,10 +170,8 @@ class RecipeSerializer(serializers.ModelSerializer):
             recipe.tags.add(tag)
 
         for ingredient_data in ingredients_data:
-            print(ingredient_data)
             ingredient_id = ingredient_data['id']
             amount = ingredient_data['amount']
-            print(amount)
             if ingredient_id and amount:
                 ingredient = get_object_or_404(Ingredient, id=ingredient_id)
                 RecipeIngredient.objects.create(
@@ -258,7 +258,7 @@ class SubscribeSerializer(UserSerializer):
         model = User
         fields = (
             'email', 'id', 'username', 'first_name', 'last_name',
-            'is_subscribed', 'avatar', 'recipes', 'recipes_count'
+            'is_subscribed', 'recipes', 'recipes_count', 'avatar',
         )
         validators = [
             UniqueTogetherValidator(

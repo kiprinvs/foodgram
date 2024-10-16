@@ -1,5 +1,6 @@
 import random
 import string
+from turtle import update
 
 from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
@@ -9,16 +10,20 @@ from django.shortcuts import get_object_or_404, redirect
 
 from djoser.views import UserViewSet as DjUserViewSet
 from rest_framework import status, viewsets
+from rest_framework import generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from api.pagination import CustomLimitPagination
+from api.permissions import IsAuthor
 from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingList, RecipeIngredient, ShortLink
 from users.models import Subscribe
 from .serializers import (
     AvatarUserSerializer, IngredientSerializer, RecipeSerializer, RecipeSubscribeSerializer,
     SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer, ShortLinkSerializer,
-    CustomTokenCreateSerializer
+    SubscribeSerializer
 )
 
 User = get_user_model()
@@ -32,6 +37,15 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    def get_permissions(self):
+
+        if self.action == 'create':
+            return (IsAuthenticated(),)
+        elif self.action in ('destroy', 'partial_update'):
+            return (IsAuthor(),)
+
+        return super().get_permissions()
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -219,7 +233,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     pagination_class = None
-    # permission_classes = (IsAdminUser,)
+    permission_classes = (AllowAny,)
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
@@ -228,31 +242,28 @@ class IngredientViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(DjUserViewSet):
     queryset = User.objects.all()
     # serializer_class = UserSerializer
     permission_classes = [AllowAny]
+    pagination_class = CustomLimitPagination
 
     def get_serializer_class(self):
         if self.action == 'create':
             return UserCreateSerializer
-        elif self.action == 'token_create':  # Добавьте это условие
-            return CustomTokenCreateSerializer
         return UserSerializer
 
-    @action(detail=False, url_path='me', permission_classes=(IsAuthenticated,))
+    @action(detail=False, permission_classes=(IsAuthenticated,))
     def me(self, request):
-        print("вызов me")
         serializer = UserSerializer(
             request.user,
             context={'request': request}
         )
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['put'], url_path='me/avatar',
             permission_classes=(IsAuthenticated,))
     def update_avatar(self, request):
-        print("request update.data", request.data)
         user = request.user
         serializer = AvatarUserSerializer(user, data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -270,8 +281,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='subscribe',
             permission_classes=(IsAuthenticated,))
-    def subscribe(self, request, pk=None):
-        subscribed_user = get_object_or_404(User, id=pk)
+    def subscribe(self, request, **kwargs):
+        subscribed_user_id = self.kwargs.get('id')
+        subscribed_user = get_object_or_404(User, id=subscribed_user_id)
         user = request.user
 
         if user == subscribed_user:
@@ -299,8 +311,9 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
     @subscribe.mapping.delete
-    def unsubscribe(self, request, pk=None):
-        subscribed_user = get_object_or_404(User, id=pk)
+    def unsubscribe(self, request, **kwargs):
+        subscribed_user_id = self.kwargs.get('id')
+        subscribed_user = get_object_or_404(User, id=subscribed_user_id)
         subscription = Subscribe.objects.filter(
             user=request.user, subscribed_user=subscribed_user
         ).first()
@@ -317,19 +330,6 @@ class UserViewSet(viewsets.ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    @action(
-        detail=False,
-        permission_classes=(IsAuthenticated,)
-    )
-    def subscriptions(self, request):
-        subscriptions = Subscribe.objects.filter(user=request.user)
-        following_users = [sub.subscribed_user for sub in subscriptions]
-        page = self.paginate_queryset(following_users)
-        serializer = SubscribeSerializer(
-            page, many=True, context={'request': request}
-        )
-        return self.get_paginated_response(serializer.data)
-
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -339,3 +339,15 @@ def redirect_short_link(request, short_url):
     recipe_id = short_link.recipe.pk
     redirect_url = f"http://{host.domain}/recipes/{recipe_id}"
     return redirect(redirect_url)
+
+
+class SubscriptionsView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SubscribeSerializer
+
+    def get_queryset(self):
+        """Метод для получения подписок текущего пользователя."""
+        user = self.request.user
+        subscriptions = Subscribe.objects.filter(user=user)
+        following_users = [sub.subscribed_user for sub in subscriptions]
+        return following_users
