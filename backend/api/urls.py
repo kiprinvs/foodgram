@@ -12,7 +12,7 @@ router_v1 = DefaultRouter()
 router_v1_urls = [
     router_v1.register('recipes', RecipeViewSet),
     router_v1.register('tags', TagViewSet),
-    router_v1.register('ingredients', IngredientViewSet),
+    router_v1.register('ingredients', IngredientViewSet, basename='ingredients'),
     router_v1.register('users', UserViewSet, basename='users'),
 ]
 

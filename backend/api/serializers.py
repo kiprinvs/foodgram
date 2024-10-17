@@ -1,7 +1,6 @@
 import base64
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth import authenticate
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
@@ -10,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from djoser.serializers import UserSerializer as DjoserUserSerializer
 from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueTogetherValidator
 
 from recipes.models import (
@@ -120,6 +120,13 @@ class CreateRecipeIngredientSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                'Количество ингредиента должно быть больше 0.'
+            )
+        return value
+
 
 class TagSerializer(serializers.ModelSerializer):
 
@@ -141,7 +148,7 @@ class RecipeDetailSerializer(serializers.ModelSerializer):
 
 
 class RecipeSerializer(serializers.ModelSerializer):
-    image = Base64ImageField(required=False, allow_null=True)
+    image = Base64ImageField(required=True, allow_null=True)
     text = serializers.CharField(source='description')
     author = UserSerializer(read_only=True)
     tags = serializers.PrimaryKeyRelatedField(
@@ -160,6 +167,36 @@ class RecipeSerializer(serializers.ModelSerializer):
             'is_in_shopping_cart', 'name', 'image', 'text', 'cooking_time'
         )
         read_only_fields = ('author',)
+
+    def validate(self, data):
+        ingredients = data.get('recipeingredients')
+        tags = data.get('tags')
+        cooking_time = data.get('cooking_time')
+
+        if not ingredients:
+            raise serializers.ValidationError('Поле ingredients обязательное.')
+
+        ingredient_ids = [ingredient['id'] for ingredient in ingredients]
+        if len(ingredient_ids) != len(set(ingredient_ids)):
+            raise serializers.ValidationError(
+                'Ингредиенты не должны повторяться.'
+            )
+
+        if not tags:
+            raise serializers.ValidationError(
+                'Должен быть указан хотя бы один тег.'
+            )
+        if len(tags) != len(set(tags)):
+            raise serializers.ValidationError(
+                'Теги не должны повторяться.'
+            )
+
+        if cooking_time <= 0:
+            raise serializers.ValidationError(
+                'Время приготовления должно быть больше 0.'
+            )
+
+        return data
 
     def create(self, validated_data):
         tags_data = validated_data.pop('tags')
@@ -322,20 +359,3 @@ class ShortLinkSerializer(serializers.ModelSerializer):
         host = get_current_site(request)
         short_link = f"http://{host.domain}/s/{instance.short_url}"
         return {'short-link': short_link}
-
-
-class CustomTokenCreateSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField()
-
-    def validate(self, attrs):
-        email = attrs.get('email')
-        password = attrs.get('password')
-
-        user = authenticate(username=email, password=password)
-
-        if user is None:
-            raise serializers.ValidationError('Неправильный email или пароль.')
-
-        attrs['user'] = user
-        return attrs

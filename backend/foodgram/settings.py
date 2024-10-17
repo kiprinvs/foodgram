@@ -143,6 +143,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'api.pagination.CustomLimitPagination',
     'PAGE_SIZE': 6,
+
 }
 
 

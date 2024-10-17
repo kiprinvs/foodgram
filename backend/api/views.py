@@ -1,6 +1,5 @@
 import random
 import string
-from turtle import update
 
 from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
@@ -14,7 +13,6 @@ from rest_framework import generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from api.pagination import CustomLimitPagination
 from api.permissions import IsAuthor
@@ -62,18 +60,17 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         if is_favorited:
             user = self.request.user
-            favorite_recipe_ids = Favorite.objects.filter(
-                user=user
-            ).values_list('recipe_id')
-            queryset = queryset.filter(id__in=favorite_recipe_ids)
+            if is_favorited and user.is_authenticated:
+                return queryset.filter(favorites__user=user)
+            return queryset
 
         if is_in_shopping_cart:
-            user = self.request.user
-            shopping_cart_recipe_ids = ShoppingList.objects.filter(
-                user=user
-            ).values_list('recipe_id')
-            queryset = queryset.filter(id__in=shopping_cart_recipe_ids)
-
+            if self.request.user.is_authenticated:
+                user = self.request.user
+                shopping_cart_recipe_ids = ShoppingList.objects.filter(
+                    user=user
+                ).values_list('recipe_id')
+                queryset = queryset.filter(id__in=shopping_cart_recipe_ids)
         return queryset
 
     def destroy(self, request, pk=None):
@@ -124,7 +121,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
             return Response(
                 {'detail': 'Этого рецепта нет в избранном.'},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(detail=True, methods=('post', 'delete'),
@@ -163,7 +160,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
             return Response(
                 {'detail': 'Этого рецепта нет в списке покупок.'},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(detail=False, permission_classes=[IsAuthenticated])
@@ -236,10 +233,20 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
 
 
-class IngredientViewSet(viewsets.ModelViewSet):
+class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
     pagination_class = None
+    permission_classes = (AllowAny,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        name = self.request.GET.get('name', None)
+
+        if name:
+            queryset = queryset.filter(name__istartswith=name)
+
+        return queryset
 
 
 class UserViewSet(DjUserViewSet):
@@ -253,13 +260,19 @@ class UserViewSet(DjUserViewSet):
             return UserCreateSerializer
         return UserSerializer
 
-    @action(detail=False, permission_classes=(IsAuthenticated,))
+    @action(detail=False, url_path='me', permission_classes=(IsAuthenticated,))
     def me(self, request):
-        serializer = UserSerializer(
-            request.user,
-            context={'request': request}
+        print('ВЫЗОВ МЕ')
+        if request.user.is_authenticated:
+            serializer = UserSerializer(
+                request.user,
+                context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(
+            {'detail': 'Необходима аутентификация.'},
+            status=status.HTTP_401_UNAUTHORIZED
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['put'], url_path='me/avatar',
             permission_classes=(IsAuthenticated,))
