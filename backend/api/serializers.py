@@ -5,15 +5,14 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
-# from djoser.serializers import UserCreateSerializer, UserSerializer
-from djoser.serializers import UserSerializer as DjoserUserSerializer
-from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
+from djoser.serializers import UserSerializer as DjUserSerializer
+from djoser.serializers import UserCreateSerializer as DjUserCreateSerializer
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueTogetherValidator
 
 from recipes.models import (
-    Favorite, Ingredient, RecipeIngredient, Recipe, RecipeTag, ShoppingList, Tag, ShortLink
+    Favorite, Ingredient, Recipe, RecipeIngredient,
+    ShortLink, ShoppingList, Tag
 )
 from users.models import Subscribe
 from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
@@ -40,7 +39,7 @@ class AvatarUserSerializer(serializers.ModelSerializer):
         fields = ('avatar',)
 
 
-class UserSerializer(DjoserUserSerializer):
+class UserSerializer(DjUserSerializer):
     avatar = Base64ImageField(required=False)
     is_subscribed = serializers.SerializerMethodField(read_only=True)
 
@@ -60,7 +59,7 @@ class UserSerializer(DjoserUserSerializer):
         ).exists()
 
 
-class UserCreateSerializer(DjoserUserCreateSerializer):
+class UserCreateSerializer(DjUserCreateSerializer):
 
     email = serializers.EmailField(max_length=MAX_LENGTH_EMAIL, required=True)
     username = serializers.CharField(

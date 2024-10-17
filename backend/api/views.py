@@ -3,26 +3,28 @@ import string
 
 from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
-from django_filters.rest_framework import DjangoFilterBackend
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
-
+from django_filters.rest_framework import DjangoFilterBackend
 from djoser.views import UserViewSet as DjUserViewSet
-from rest_framework import status, viewsets
-from rest_framework import generics
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from api.pagination import CustomLimitPagination
 from api.permissions import IsAuthor
-from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingList, RecipeIngredient, ShortLink
-from users.models import Subscribe
-from .serializers import (
-    AvatarUserSerializer, IngredientSerializer, RecipeSerializer, RecipeSubscribeSerializer,
-    SubscribeSerializer, TagSerializer, UserCreateSerializer, UserSerializer, UserSerializer, ShortLinkSerializer,
-    SubscribeSerializer
+from api.serializers import (
+    AvatarUserSerializer, IngredientSerializer, RecipeSerializer,
+    RecipeSubscribeSerializer, SubscribeSerializer, ShortLinkSerializer,
+    TagSerializer, UserCreateSerializer, UserSerializer
 )
+from recipes.models import (
+    Favorite, Ingredient, Recipe, RecipeIngredient,
+    Tag, ShoppingList, ShortLink
+)
+from users.models import Subscribe
 
 User = get_user_model()
 
@@ -292,56 +294,55 @@ class UserViewSet(DjUserViewSet):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'], url_path='subscribe',
-            permission_classes=(IsAuthenticated,))
+    @action(
+        detail=True,
+        methods=['post', 'delete'],
+        permission_classes=(IsAuthenticated,)
+    )
     def subscribe(self, request, **kwargs):
         subscribed_user_id = self.kwargs.get('id')
         subscribed_user = get_object_or_404(User, id=subscribed_user_id)
         user = request.user
 
-        if user == subscribed_user:
+        if request.method == 'POST':
+            if user == subscribed_user:
+                return Response(
+                    {'detail': 'Нельзя подписаться на самого себя.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if Subscribe.objects.filter(
+                user=user, subscribed_user=subscribed_user
+            ).exists():
+                return Response(
+                    {'detail': 'Вы уже подписаны на этого пользователя.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            Subscribe.objects.create(
+                user=user, subscribed_user=subscribed_user
+            )
+            serializer = SubscribeSerializer(
+                subscribed_user, context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        elif request.method == 'DELETE':
+            subscription = Subscribe.objects.filter(
+                user=user, subscribed_user=subscribed_user
+            ).first()
+
+            if subscription:
+                subscription.delete()
+                return Response(
+                    {'detail': 'Вы отписались от пользователя.'},
+                    status=status.HTTP_204_NO_CONTENT
+                )
+
             return Response(
-                {'detail': 'Нельзя подписаться на самого себя.'},
+                {'detail': 'Вы не подписаны на этого пользователя.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        if Subscribe.objects.filter(
-            user=user, subscribed_user=subscribed_user
-        ).exists():
-            return Response(
-                {'detail': 'Вы уже подписаны на этого пользователя.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        Subscribe.objects.create(
-            user=user, subscribed_user=subscribed_user
-        )
-        serializer = SubscribeSerializer(
-            subscribed_user, context={'request': request}
-        )
-        return Response(
-            serializer.data, status=status.HTTP_201_CREATED
-        )
-
-    @subscribe.mapping.delete
-    def unsubscribe(self, request, **kwargs):
-        subscribed_user_id = self.kwargs.get('id')
-        subscribed_user = get_object_or_404(User, id=subscribed_user_id)
-        subscription = Subscribe.objects.filter(
-            user=request.user, subscribed_user=subscribed_user
-        ).first()
-
-        if subscription:
-            subscription.delete()
-            return Response(
-                {'detail': 'Вы отписались от пользователя.'},
-                status=status.HTTP_204_NO_CONTENT
-            )
-
-        return Response(
-            {'detail': 'Вы не подписаны на этого пользователя.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
 
 
 @api_view(['GET'])
@@ -364,3 +365,18 @@ class SubscriptionsView(generics.ListAPIView):
         subscriptions = Subscribe.objects.filter(user=user)
         following_users = [sub.subscribed_user for sub in subscriptions]
         return following_users
+
+
+class MeView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """Метод для получения информации о текущем пользователе."""
+        if not request.user.is_authenticated:
+            return Response(
+                {'detail': 'Необходима аутентификация.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        serializer = UserSerializer(request.user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
