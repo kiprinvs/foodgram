@@ -5,17 +5,15 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
-from djoser.serializers import UserSerializer as DjUserSerializer
 from djoser.serializers import UserCreateSerializer as DjUserCreateSerializer
+from djoser.serializers import UserSerializer as DjUserSerializer
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from recipes.models import (
-    Favorite, Ingredient, Recipe, RecipeIngredient,
-    ShortLink, ShoppingList, Tag
-)
-from users.models import Subscribe
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+                            ShoppingList, ShortLink, Tag)
 from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
+from users.models import Subscribe
 
 User = get_user_model()
 

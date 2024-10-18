@@ -15,21 +15,20 @@ from rest_framework.views import APIView
 
 from api.pagination import CustomLimitPagination
 from api.permissions import IsAuthor
-from api.serializers import (
-    AvatarUserSerializer, IngredientSerializer, RecipeSerializer,
-    RecipeSubscribeSerializer, SubscribeSerializer, ShortLinkSerializer,
-    TagSerializer, UserCreateSerializer, UserSerializer
-)
-from recipes.models import (
-    Favorite, Ingredient, Recipe, RecipeIngredient,
-    Tag, ShoppingList, ShortLink
-)
+from api.serializers import (AvatarUserSerializer, IngredientSerializer,
+                             RecipeSerializer, RecipeSubscribeSerializer,
+                             ShortLinkSerializer, SubscribeSerializer,
+                             TagSerializer, UserCreateSerializer,
+                             UserSerializer)
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+                            ShoppingList, ShortLink, Tag)
 from users.models import Subscribe
 
 User = get_user_model()
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
+    """Администрирование рецептов."""
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
     filter_backends = (DjangoFilterBackend,)
@@ -39,12 +38,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
         serializer.save(author=self.request.user)
 
     def get_permissions(self):
-
         if self.action == 'create':
             return (IsAuthenticated(),)
         elif self.action in ('destroy', 'partial_update'):
             return (IsAuthor(),)
-
         return super().get_permissions()
 
     def get_queryset(self):
@@ -76,6 +73,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         return queryset
 
     def destroy(self, request, pk=None):
+        """Удаление рецепта."""
         recipe = get_object_or_404(Recipe, id=pk)
 
         if recipe.author != request.user:
@@ -92,6 +90,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         permission_classes=(IsAuthenticated,)
     )
     def favorite(self, request, pk):
+        """Избранное."""
         user = request.user
         recipe = get_object_or_404(Recipe, pk=pk)
 
@@ -129,6 +128,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=('post', 'delete'),
             permission_classes=(IsAuthenticated,))
     def shopping_cart(self, request, pk):
+        """Список покупок."""
         user = request.user
         recipe = get_object_or_404(Recipe, pk=pk)
 
@@ -204,6 +204,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, url_path='get-link')
     def get_link(self, request, pk):
+        """Получение короткой ссылки."""
         recipe = get_object_or_404(Recipe, id=pk)
         short_link = ShortLink.objects.filter(recipe=recipe).first()
 
@@ -219,6 +220,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def generate_unique_short_url(self):
+        """Генератор коротких ссылок."""
         while True:
             length = 6
             short_url = ''.join(random.choices(
@@ -229,6 +231,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
+    """Теги."""
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     pagination_class = None
@@ -236,6 +239,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
+    """Получение ингредиентов."""
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
     pagination_class = None
@@ -252,8 +256,8 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class UserViewSet(DjUserViewSet):
+    """Администрирование пользователей."""
     queryset = User.objects.all()
-    # serializer_class = UserSerializer
     permission_classes = [AllowAny]
     pagination_class = CustomLimitPagination
 
@@ -262,37 +266,26 @@ class UserViewSet(DjUserViewSet):
             return UserCreateSerializer
         return UserSerializer
 
-    @action(detail=False, url_path='me', permission_classes=(IsAuthenticated,))
-    def me(self, request):
-        print('ВЫЗОВ МЕ')
-        if request.user.is_authenticated:
-            serializer = UserSerializer(
-                request.user,
-                context={'request': request}
-            )
+    @action(
+        detail=False,
+        methods=['put', 'delete'],
+        url_path='me/avatar',
+        permission_classes=(IsAuthenticated,)
+    )
+    def avatar(self, request):
+        """Установка и удаление аватара."""
+        user = request.user
+
+        if request.method == 'PUT':
+            serializer = AvatarUserSerializer(user, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(
-            {'detail': 'Необходима аутентификация.'},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
 
-    @action(detail=False, methods=['put'], url_path='me/avatar',
-            permission_classes=(IsAuthenticated,))
-    def update_avatar(self, request):
-        user = request.user
-        serializer = AvatarUserSerializer(user, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @update_avatar.mapping.delete
-    def delete_avatar(self, request):
-        user = request.user
-
-        if user.avatar:
-            user.avatar.delete()
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        elif request.method == 'DELETE':
+            if user.avatar:
+                user.avatar.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=True,
@@ -300,6 +293,7 @@ class UserViewSet(DjUserViewSet):
         permission_classes=(IsAuthenticated,)
     )
     def subscribe(self, request, **kwargs):
+        """Подписка."""
         subscribed_user_id = self.kwargs.get('id')
         subscribed_user = get_object_or_404(User, id=subscribed_user_id)
         user = request.user
@@ -348,6 +342,7 @@ class UserViewSet(DjUserViewSet):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def redirect_short_link(request, short_url):
+    """Метод для редиректа с короткой ссылки."""
     short_link = get_object_or_404(ShortLink, short_url=short_url)
     host = get_current_site(request)
     recipe_id = short_link.recipe.pk
@@ -356,6 +351,7 @@ def redirect_short_link(request, short_url):
 
 
 class SubscriptionsView(generics.ListAPIView):
+    """Список подписок"""
     permission_classes = [IsAuthenticated]
     serializer_class = SubscribeSerializer
 

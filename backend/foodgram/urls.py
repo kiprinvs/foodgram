@@ -5,7 +5,6 @@ from django.urls import include, path
 
 from api.views import redirect_short_link
 
-
 urlpatterns = [
     path(
         's/<str:short_url>/', redirect_short_link, name='redirect-short-link'

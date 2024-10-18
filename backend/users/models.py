@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
 
+from .constants import MAX_LENGTH_NAME
+
 
 class User(AbstractUser):
     """Модель пользователя"""
@@ -12,7 +14,7 @@ class User(AbstractUser):
 
     username = models.CharField(
         verbose_name='Юзернейм',
-        max_length=150,
+        max_length=MAX_LENGTH_NAME,
         unique=True,
         validators=(UnicodeUsernameValidator,),
     )
@@ -22,11 +24,11 @@ class User(AbstractUser):
     )
     first_name = models.CharField(
         verbose_name='Имя',
-        max_length=150,
+        max_length=MAX_LENGTH_NAME,
     )
     last_name = models.CharField(
         verbose_name='Фамилия',
-        max_length=150,
+        max_length=MAX_LENGTH_NAME,
     )
     avatar = models.ImageField(
         verbose_name='Фото',
@@ -35,7 +37,7 @@ class User(AbstractUser):
         null=True,
     )
     role = models.CharField(
-        max_length=150,
+        max_length=MAX_LENGTH_NAME,
         verbose_name='Роль',
         choices=RoleChoice.choices,
         default=RoleChoice.USER,

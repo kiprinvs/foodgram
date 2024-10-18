@@ -151,6 +151,12 @@ class Favorite(models.Model):
     class Meta:
         verbose_name = 'избранное'
         verbose_name_plural = 'Избранные'
+        constraints = [
+            UniqueConstraint(
+                fields=('user', 'recipe'),
+                name='unique_favorite_user_recipe'
+            )
+        ]
 
 
 class ShoppingList(models.Model):
@@ -193,6 +199,7 @@ class RecipeTag(models.Model):
 
 
 class ShortLink(models.Model):
+    """Модель для короткой ссылки."""
     recipe = models.OneToOneField(
         Recipe, on_delete=models.CASCADE,
         related_name='short_link'
