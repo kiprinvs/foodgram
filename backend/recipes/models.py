@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import UniqueConstraint
-from django.urls import reverse
 
 User = get_user_model()
 
@@ -45,10 +44,9 @@ class Recipe(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        verbose_name = 'рецепт'
+        verbose_name_plural = 'Рецепты'
         ordering = ('-created_at',)
-
-    def get_absolute_url(self):
-        return reverse('recipes-detail', kwargs={'pk': self.pk})
 
     def __str__(self):
         return self.name
@@ -68,6 +66,11 @@ class Tag(models.Model):
         unique=True,
     )
 
+    class Meta:
+        verbose_name = 'тег'
+        verbose_name_plural = 'Теги'
+        ordering = ('name',)
+
     def __str__(self):
         return self.name
 
@@ -85,7 +88,9 @@ class Ingredient(models.Model):
     )
 
     class Meta():
-        verbose_name = 'Ингредиент'
+        verbose_name = 'ингредиент'
+        verbose_name_plural = 'Ингредиенты'
+        ordering = ('name',)
         constraints = (
             models.UniqueConstraint(
                 fields=('name', 'measurement_unit'),
@@ -117,7 +122,8 @@ class RecipeIngredient(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Количество ингридиента'
+        verbose_name = 'количество ингридиента'
+        verbose_name_plural = 'Количество ингридиентов'
         constraints = [
             UniqueConstraint(
                 fields=('recipe', 'ingredient'),
@@ -143,7 +149,8 @@ class Favorite(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Избранное'
+        verbose_name = 'избранное'
+        verbose_name_plural = 'Избранные'
 
 
 class ShoppingList(models.Model):
@@ -163,7 +170,8 @@ class ShoppingList(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Список покупок'
+        verbose_name = 'список покупок'
+        verbose_name_plural = 'Список покупок'
         constraints = [
             UniqueConstraint(
                 fields=['user', 'recipe'],

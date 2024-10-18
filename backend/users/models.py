@@ -50,7 +50,7 @@ class User(AbstractUser):
         ordering = ('username',)
 
     def __str__(self):
-        return f'{self.username} - {self.email}'
+        return self.username
 
     @property
     def is_admin(self):
@@ -77,6 +77,8 @@ class Subscribe(models.Model):
     )
 
     class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'subscribed_user'],
