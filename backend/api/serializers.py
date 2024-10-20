@@ -333,15 +333,25 @@ class RecipeSubscribeSerializer(serializers.ModelSerializer):
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
-    recipe = RecipeSubscribeSerializer(read_only=True)
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Favorite
-        fields = ('id', 'user', 'recipe')
+        fields = ('user', 'recipe')
 
-    def create(self, validated_data):
-        return super().create(validated_data)
+    def validate(self, data):
+        if Favorite.objects.filter(
+            user=data['user'], recipe=data['recipe']
+        ).exists():
+            raise serializers.ValidationError("Этот рецепт уже в избранном.")
+        return data
+
+    def to_representation(self, instance):
+        return {
+            'id': instance.recipe.id,
+            'name': instance.recipe.name,
+            'image': instance.recipe.image.url,
+            "cooking_time": instance.recipe.cooking_time
+        }
 
 
 class ShortLinkSerializer(serializers.ModelSerializer):
@@ -356,3 +366,27 @@ class ShortLinkSerializer(serializers.ModelSerializer):
         host = get_current_site(request)
         short_link = f"http://{host.domain}/s/{instance.short_url}"
         return {'short-link': short_link}
+
+
+class ShoppingCartSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ShoppingList
+        fields = ('user', 'recipe')
+
+    def validate(self, data):
+        if ShoppingList.objects.filter(
+            user=data['user'], recipe=data['recipe']
+        ).exists():
+            raise serializers.ValidationError(
+                {'detail': 'Вы уже добавили этот рецепт в список покупок'},
+            )
+        return data
+
+    def to_representation(self, instance):
+        return {
+            'id': instance.recipe.id,
+            'name': instance.recipe.name,
+            'image': instance.recipe.image.url,
+            "cooking_time": instance.recipe.cooking_time
+        }
