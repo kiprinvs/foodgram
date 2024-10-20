@@ -13,6 +13,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.filters import IngredientFilter, RecipeFilter
 from api.pagination import CustomLimitPagination
 from api.permissions import IsAuthor
 from api.serializers import (AvatarUserSerializer, IngredientSerializer,
@@ -33,6 +34,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     serializer_class = RecipeSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ('tags__slug',)
+    filterset_class = RecipeFilter
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -43,34 +45,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
         elif self.action in ('destroy', 'partial_update'):
             return (IsAuthor(),)
         return super().get_permissions()
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        author_id = self.request.GET.get('author', None)
-        tags = self.request.GET.getlist('tags')
-        is_favorited = self.request.GET.get('is_favorited', None)
-        is_in_shopping_cart = self.request.GET.get('is_in_shopping_cart', None)
-
-        if author_id is not None:
-            queryset = queryset.filter(author__id=author_id)
-
-        if tags:
-            queryset = queryset.filter(tags__slug__in=tags).distinct()
-
-        if is_favorited:
-            user = self.request.user
-            if is_favorited and user.is_authenticated:
-                return queryset.filter(favorites__user=user)
-            return queryset
-
-        if is_in_shopping_cart:
-            if self.request.user.is_authenticated:
-                user = self.request.user
-                shopping_cart_recipe_ids = ShoppingList.objects.filter(
-                    user=user
-                ).values_list('recipe_id')
-                queryset = queryset.filter(id__in=shopping_cart_recipe_ids)
-        return queryset
 
     def destroy(self, request, pk=None):
         """Удаление рецепта."""
@@ -244,15 +218,8 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = IngredientSerializer
     pagination_class = None
     permission_classes = (AllowAny,)
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        name = self.request.GET.get('name', None)
-
-        if name:
-            queryset = queryset.filter(name__istartswith=name)
-
-        return queryset
+    filter_backends = (DjangoFilterBackend,)
+    filterset_class = IngredientFilter
 
 
 class UserViewSet(DjUserViewSet):
