@@ -3,6 +3,7 @@ import string
 
 from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
+from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django_filters.rest_framework import DjangoFilterBackend
@@ -67,7 +68,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
             user=request.user, recipe=recipe
         ).delete()
 
-        if deleted_count == 0:
+        if not deleted_count:
             return Response(
                 {'detail': 'Этого рецепта нет в избранном.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -97,7 +98,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
             user=request.user, recipe=recipe
         ).delete()
 
-        if deleted_count == 0:
+        if not deleted_count:
             return Response(
                 {'detail': 'Этого рецепта нет в списке покупок.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -112,31 +113,21 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def download_shopping_cart(self, request):
         """Скачать список покупок текущего пользователя в текстовом формате."""
         user = request.user
-        shopping_list = ShoppingList.objects.filter(user=user)
         ingredients = RecipeIngredient.objects.filter(
-            recipe__in=shopping_list.values_list('recipe', flat=True)
+            recipe__shopping_lists__user=user
+        ).values(
+            'ingredient__name',
+            'ingredient__measurement_unit'
+        ).annotate(
+            total_amount=Sum('amount')
         )
-        ingredient_count = {}
-
-        for recipe_ingredient in ingredients:
-            ingredient_name = recipe_ingredient.ingredient.name
-            measurement_unit = recipe_ingredient.ingredient.measurement_unit
-            amount = recipe_ingredient.amount
-
-            if ingredient_name in ingredient_count:
-                ingredient_count[ingredient_name]['amount'] += amount
-            else:
-                ingredient_count[ingredient_name] = {
-                    'measurement_unit': measurement_unit,
-                    'amount': amount
-                }
-
         shopping_list_text = ''
 
-        for name, data in ingredient_count.items():
+        for ingredient in ingredients:
             shopping_list_text += (
-                f'{name} ({data["measurement_unit"]}) - '
-                f'{data["amount"]}\n'
+                f"{ingredient['ingredient__name']} "
+                f"({ingredient['ingredient__measurement_unit']}) - "
+                f"{ingredient['total_amount']}\n"
             )
 
         response = HttpResponse(shopping_list_text, content_type='text/plain')
