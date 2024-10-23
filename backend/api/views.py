@@ -19,8 +19,8 @@ from api.pagination import CustomLimitPagination
 from api.permissions import IsAuthorOrIsAuthenticatedOrReadOnly
 from api.serializers import (AvatarUserSerializer, FavoriteSerializer, IngredientSerializer,
                              RecipeSerializer, RecipeSubscribeSerializer, ShoppingCartSerializer,
-                             ShortLinkSerializer, SubscribeSerializer,
-                             TagSerializer, UserCreateSerializer,
+                             ShortLinkSerializer, SubscribeSerializer, SubscribeCreateSerializer,
+                             TagSerializer, RecipeCreateSerializer,
                              UserSerializer)
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingList, ShortLink, Tag)
@@ -32,13 +32,17 @@ User = get_user_model()
 class RecipeViewSet(viewsets.ModelViewSet):
     """Администрирование рецептов."""
     queryset = Recipe.objects.all()
-    serializer_class = RecipeSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ('tags__slug',)
     filterset_class = RecipeFilter
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action in ('list', 'retrieve'):
+            return RecipeSerializer
+        return RecipeCreateSerializer
 
     def get_permissions(self):
         if self.action == 'create':
@@ -187,83 +191,65 @@ class UserViewSet(DjUserViewSet):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
     pagination_class = CustomLimitPagination
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return UserCreateSerializer
-        return UserSerializer
+    serializer_class = UserSerializer
 
     @action(
         detail=False,
-        methods=['put', 'delete'],
+        methods=('put',),
         url_path='me/avatar',
         permission_classes=(IsAuthenticated,)
     )
     def avatar(self, request):
         """Установка и удаление аватара."""
         user = request.user
+        serializer = AvatarUserSerializer(user, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-        if request.method == 'PUT':
-            serializer = AvatarUserSerializer(user, data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        elif request.method == 'DELETE':
-            if user.avatar:
-                user.avatar.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+    @avatar.mapping.delete
+    def remove_avatar(self, request):
+        user = request.user
+        if user.avatar:
+            user.avatar.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=True,
-        methods=['post', 'delete'],
+        methods=('post',),
         permission_classes=(IsAuthenticated,)
     )
     def subscribe(self, request, **kwargs):
         """Подписка."""
-        subscribed_user_id = self.kwargs.get('id')
-        subscribed_user = get_object_or_404(User, id=subscribed_user_id)
-        user = request.user
+        subscribed_user = get_object_or_404(User, id=self.kwargs.get('id'))
+        subscribe_data = {
+            'user': request.user.id, 'subscribed_user': subscribed_user.id
+        }
+        serializer = SubscribeCreateSerializer(
+            data=subscribe_data, context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        if request.method == 'POST':
-            if user == subscribed_user:
-                return Response(
-                    {'detail': 'Нельзя подписаться на самого себя.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+    @subscribe.mapping.delete
+    def remove_subscribe(self, request, **kwargs):
+        subscribed_user = get_object_or_404(User, id=self.kwargs.get('id'))
+        subscription = Subscribe.objects.filter(
+            user=request.user.id, subscribed_user=subscribed_user.id
+        ).first()
 
-            if Subscribe.objects.filter(
-                user=user, subscribed_user=subscribed_user
-            ).exists():
-                return Response(
-                    {'detail': 'Вы уже подписаны на этого пользователя.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            Subscribe.objects.create(
-                user=user, subscribed_user=subscribed_user
-            )
-            serializer = SubscribeSerializer(
-                subscribed_user, context={'request': request}
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        elif request.method == 'DELETE':
-            subscription = Subscribe.objects.filter(
-                user=user, subscribed_user=subscribed_user
-            ).first()
-
-            if subscription:
-                subscription.delete()
-                return Response(
-                    {'detail': 'Вы отписались от пользователя.'},
-                    status=status.HTTP_204_NO_CONTENT
-                )
-
+        if not subscription:
             return Response(
                 {'detail': 'Вы не подписаны на этого пользователя.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        subscription.delete()
+        return Response(
+            {'detail': 'Вы отписались от пользователя.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
 
 
 @api_view(['GET'])
