@@ -1,17 +1,11 @@
-import base64
-
 from django.contrib.auth import get_user_model
-from django.contrib.sites.shortcuts import get_current_site
-from django.core.files.base import ContentFile
-from django.shortcuts import get_object_or_404
 from djoser.serializers import UserSerializer as DjUserSerializer
 from drf_extra_fields.fields import Base64ImageField
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
-                            ShoppingList, ShortLink, Tag)
-from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
+                            ShoppingList, Tag)
 from users.models import Subscribe
 
 User = get_user_model()
@@ -303,20 +297,6 @@ class FavoriteSerializer(serializers.ModelSerializer):
             'image': instance.recipe.image.url,
             "cooking_time": instance.recipe.cooking_time
         }
-
-
-class ShortLinkSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = ShortLink
-        fields = ('short_url',)
-
-    def to_representation(self, instance):
-        """Преобразует ключи в формат с дефисом."""
-        request = self.context.get('request')
-        host = get_current_site(request)
-        short_link = f"http://{host.domain}/s/{instance.short_url}"
-        return {'short-link': short_link}
 
 
 class ShoppingCartSerializer(serializers.ModelSerializer):
