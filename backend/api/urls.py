@@ -3,8 +3,7 @@ from django.conf.urls.static import static
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from api.views import (IngredientViewSet, RecipeViewSet,
-                       SubscriptionsView, TagViewSet, UserViewSet)
+from api.views import IngredientViewSet, RecipeViewSet, TagViewSet, UserViewSet
 
 app_name = 'api'
 
@@ -20,7 +19,6 @@ router_v1_urls = [
 ]
 
 urlpatterns = [
-    path('users/subscriptions/', SubscriptionsView.as_view()),
     path('auth/', include('djoser.urls.authtoken')),
     path('', include(router_v1.urls)),
 ]

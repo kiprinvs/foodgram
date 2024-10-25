@@ -1,7 +1,14 @@
+import random
+import string
+
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import UniqueConstraint
+
+from api.constants import (MAX_LENGTH_INGREDIENT_NAME,
+                           MAX_LENGTH_MEASUREMENT_UNIT, MAX_LENGTH_RECIPE_NAME,
+                           MAX_LENGTH_SHORT_LINK, MAX_LENGTH_TAG)
 
 User = get_user_model()
 
@@ -11,7 +18,7 @@ class Recipe(models.Model):
 
     name = models.CharField(
         verbose_name='Название',
-        max_length=256
+        max_length=MAX_LENGTH_RECIPE_NAME
     )
     description = models.TextField(
         verbose_name='Описание',
@@ -41,6 +48,12 @@ class Recipe(models.Model):
         verbose_name='Теги',
         related_name='recipes'
     )
+    short_link = models.CharField(
+        max_length=MAX_LENGTH_SHORT_LINK,
+        unique=True,
+        blank=True,
+        null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -52,18 +65,34 @@ class Recipe(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        """Сохраняет рецепт, генерируя короткую ссылку при необходимости."""
+        if not self.short_link:
+            self.short_link = self.generate_unique_short_url()
+        super().save(*args, **kwargs)
+
+    def generate_unique_short_url(self):
+        """Генератор коротких ссылок."""
+        length = MAX_LENGTH_SHORT_LINK
+        while True:
+            short_link = ''.join(
+                random.choices(string.ascii_letters + string.digits, k=length)
+            )
+            if not Recipe.objects.filter(short_link=short_link).exists():
+                return short_link
+
 
 class Tag(models.Model):
     """Модель тега."""
 
     name = models.CharField(
         verbose_name='Название',
-        max_length=32,
+        max_length=MAX_LENGTH_TAG,
         unique=True,
     )
     slug = models.SlugField(
         verbose_name='Слаг',
-        max_length=32,
+        max_length=MAX_LENGTH_TAG,
         unique=True,
     )
 
@@ -81,11 +110,11 @@ class Ingredient(models.Model):
 
     name = models.CharField(
         verbose_name='Название',
-        max_length=128,
+        max_length=MAX_LENGTH_INGREDIENT_NAME,
     )
     measurement_unit = models.CharField(
         verbose_name='Единица измерения',
-        max_length=64,
+        max_length=MAX_LENGTH_MEASUREMENT_UNIT,
     )
 
     class Meta():
@@ -198,15 +227,3 @@ class RecipeTag(models.Model):
         Tag,
         on_delete=models.CASCADE
     )
-
-
-class ShortLink(models.Model):
-    """Модель для короткой ссылки."""
-    recipe = models.OneToOneField(
-        Recipe, on_delete=models.CASCADE,
-        related_name='short_link'
-    )
-    short_url = models.CharField(max_length=6, unique=True)
-
-    def __str__(self):
-        return f'{self.recipe.name}: {self.short_url}'

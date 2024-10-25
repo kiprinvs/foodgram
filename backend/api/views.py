@@ -1,28 +1,25 @@
-import random
-import string
-
 from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
 from django.db.models import Sum
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.http import HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from djoser.views import UserViewSet as DjUserViewSet
-from rest_framework import generics, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from api.filters import IngredientFilter, RecipeFilter
 from api.pagination import CustomLimitPagination
-from api.permissions import IsAuthorOrIsAuthenticatedOrReadOnly
-from api.serializers import (AvatarUserSerializer, FavoriteSerializer, IngredientSerializer,
-                             RecipeSerializer, RecipeSubscribeSerializer, ShoppingCartSerializer,
-                             ShortLinkSerializer, SubscribeSerializer, SubscribeCreateSerializer,
-                             TagSerializer, RecipeCreateSerializer,
-                             UserSerializer)
+from api.permissions import IsAuthorOrAuthenticatedOrReadOnly
+from api.serializers import (AvatarUserSerializer, FavoriteSerializer,
+                             IngredientSerializer, RecipeCreateSerializer,
+                             RecipeSerializer, ShoppingCartSerializer,
+                             SubscribeCreateSerializer, SubscribeSerializer,
+                             TagSerializer, UserSerializer)
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
-                            ShoppingList, ShortLink, Tag)
+                            ShoppingList, Tag)
 from users.models import Subscribe
 
 User = get_user_model()
@@ -47,7 +44,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return (IsAuthenticated(),)
         elif self.action in ('destroy', 'partial_update'):
-            return (IsAuthorOrIsAuthenticatedOrReadOnly(),)
+            return (IsAuthorOrAuthenticatedOrReadOnly(),)
         return super().get_permissions()
 
     @action(
@@ -143,28 +140,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def get_link(self, request, pk):
         """Получение короткой ссылки."""
         recipe = get_object_or_404(Recipe, id=pk)
-        short_link = ShortLink.objects.filter(recipe=recipe).first()
 
-        if not short_link:
-            short_url = self.generate_unique_short_url()
-            short_link = ShortLink.objects.create(
-                recipe=recipe, short_url=short_url
-            )
+        if not recipe.short_link:
+            recipe.short_link = recipe.generate_unique_short_url()
+            recipe.save()
 
-        serializer = ShortLinkSerializer(
-            short_link, context={'request': request}
-        )
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def generate_unique_short_url(self):
-        """Генератор коротких ссылок."""
-        while True:
-            length = 6
-            short_url = ''.join(random.choices(
-                string.ascii_letters + string.digits, k=length)
-            )
-            if not ShortLink.objects.filter(short_url=short_url).exists():
-                return short_url
+        short_link = f"http://{request.get_host()}/s/{recipe.short_link}/"
+        return Response({'short-link': short_link}, status=status.HTTP_200_OK)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
@@ -193,7 +175,9 @@ class UserViewSet(DjUserViewSet):
     serializer_class = UserSerializer
 
     @action(
-        detail=False, methods=['get'], permission_classes=[IsAuthenticated]
+        detail=False,
+        methods=['get'],
+        permission_classes=(IsAuthenticated,)
     )
     def me(self, request):
         """Метод для получения информации о текущем пользователе."""
@@ -257,26 +241,28 @@ class UserViewSet(DjUserViewSet):
             status=status.HTTP_204_NO_CONTENT
         )
 
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[IsAuthenticated]
+    )
+    def subscriptions(self, request):
+        """Метод для получения подписок текущего пользователя."""
+        subscriptions = Subscribe.objects.filter(user=self.request.user)
+        following_users = [sub.subscribed_user for sub in subscriptions]
+        pages = self.paginate_queryset(following_users)
+        serializer = SubscribeSerializer(
+            pages, many=True, context={'request': request}
+        )
+
+        return self.get_paginated_response(serializer.data)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def redirect_short_link(request, short_url):
     """Метод для редиректа с короткой ссылки."""
-    short_link = get_object_or_404(ShortLink, short_url=short_url)
+    recipe = get_object_or_404(Recipe, short_link=short_url)
     host = get_current_site(request)
-    recipe_id = short_link.recipe.pk
-    redirect_url = f"http://{host.domain}/recipes/{recipe_id}"
-    return redirect(redirect_url)
-
-
-class SubscriptionsView(generics.ListAPIView):
-    """Список подписок"""
-    permission_classes = [IsAuthenticated]
-    serializer_class = SubscribeSerializer
-
-    def get_queryset(self):
-        """Метод для получения подписок текущего пользователя."""
-        user = self.request.user
-        subscriptions = Subscribe.objects.filter(user=user)
-        following_users = [sub.subscribed_user for sub in subscriptions]
-        return following_users
+    redirect_url = f"http://{host.domain}/recipes/{recipe.id}/"
+    return HttpResponseRedirect(redirect_url)
