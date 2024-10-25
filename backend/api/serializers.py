@@ -1,12 +1,11 @@
 import base64
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
-from djoser.serializers import UserCreateSerializer as DjUserCreateSerializer
 from djoser.serializers import UserSerializer as DjUserSerializer
+from drf_extra_fields.fields import Base64ImageField
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
@@ -16,17 +15,6 @@ from users.constants import MAX_LENGTH_EMAIL, MAX_LENGTH_NAME
 from users.models import Subscribe
 
 User = get_user_model()
-
-
-class Base64ImageField(serializers.ImageField):
-    def to_internal_value(self, data):
-
-        if isinstance(data, str) and data.startswith('data:image'):
-            format, imgstr = data.split(';base64,')
-            ext = format.split('/')[-1]
-            data = ContentFile(base64.b64decode(imgstr), name='temp.' + ext)
-
-        return super().to_internal_value(data)
 
 
 class AvatarUserSerializer(serializers.ModelSerializer):
@@ -111,6 +99,14 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
             'id', 'tags', 'author', 'ingredients',
             'name', 'image', 'text', 'cooking_time'
         )
+
+    def validate_image(self, value):
+        """Проверка на наличие изображения."""
+        if not value:
+            raise serializers.ValidationError(
+                "Добавьте изображение рецепта."
+            )
+        return value
 
     def validate(self, data):
         ingredients = data.get('recipeingredients')
@@ -271,7 +267,10 @@ class SubscribeSerializer(UserSerializer):
         recipes_limit = request.GET.get('recipes_limit')
         recipes = Recipe.objects.filter(author=subscribed_user)
         if recipes_limit:
-            recipes = recipes[:int(recipes_limit)]
+            try:
+                recipes = recipes[:int(recipes_limit)]
+            except ValueError:
+                pass
         serializer = RecipeSubscribeSerializer(recipes, many=True)
         return serializer.data
 

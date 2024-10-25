@@ -1,7 +1,19 @@
 from django.contrib import admin
 
-from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient, RecipeTag,
                             ShoppingList, Tag)
+
+
+class RecipeIngredientInline(admin.TabularInline):
+    model = RecipeIngredient
+    extra = 1
+    min_num = 1
+
+
+class RecipeTagInline(admin.TabularInline):
+    model = RecipeTag
+    extra = 0
+    min_num = 1
 
 
 class FavoriteAdmin(admin.ModelAdmin):
@@ -30,6 +42,7 @@ class RecipeAdmin(admin.ModelAdmin):
     search_fields = ('name', 'author__username',)
     list_filter = ('tags',)
     readonly_fields = ('recipe_in_favorites', )
+    inlines = (RecipeIngredientInline, RecipeTagInline)
 
     @admin.display(description='Добавлено в избранное раз')
     def recipe_in_favorites(self, obj):
