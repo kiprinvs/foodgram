@@ -12,7 +12,6 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from api.filters import IngredientFilter, RecipeFilter
 from api.pagination import CustomLimitPagination
@@ -194,6 +193,13 @@ class UserViewSet(DjUserViewSet):
     serializer_class = UserSerializer
 
     @action(
+        detail=False, methods=['get'], permission_classes=[IsAuthenticated]
+    )
+    def me(self, request):
+        """Метод для получения информации о текущем пользователе."""
+        return super().me(request)
+
+    @action(
         detail=False,
         methods=('put',),
         url_path='me/avatar',
@@ -274,18 +280,3 @@ class SubscriptionsView(generics.ListAPIView):
         subscriptions = Subscribe.objects.filter(user=user)
         following_users = [sub.subscribed_user for sub in subscriptions]
         return following_users
-
-
-class MeView(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        """Метод для получения информации о текущем пользователе."""
-        if not request.user.is_authenticated:
-            return Response(
-                {'detail': 'Необходима аутентификация.'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        serializer = UserSerializer(request.user, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
