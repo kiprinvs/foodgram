@@ -10,14 +10,6 @@ class UserAdmin(admin.ModelAdmin):
         'email',
         'first_name',
         'last_name',
-        'role',
-    )
-
-    list_editable = (
-        'role',
-    )
-    list_filter = (
-        'role',
     )
     search_fields = ('username', 'email')
     list_display_links = ('username',)

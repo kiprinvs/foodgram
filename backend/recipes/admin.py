@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from recipes.constants import ADMIN_EXTRA_FIELDS, ADMIN_MIN_NUM
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
-                            RecipeTag, ShoppingList, Tag)
+                            ShoppingList, Tag)
 
 
 class RecipeIngredientInline(admin.TabularInline):
@@ -12,7 +12,7 @@ class RecipeIngredientInline(admin.TabularInline):
 
 
 class RecipeTagInline(admin.TabularInline):
-    model = RecipeTag
+    model = Recipe.tags.through
     extra = ADMIN_EXTRA_FIELDS
     min_num = ADMIN_MIN_NUM
 

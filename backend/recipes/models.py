@@ -2,13 +2,15 @@ import random
 import string
 
 from django.contrib.auth import get_user_model
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.db.models import UniqueConstraint
 
 from api.constants import (MAX_LENGTH_INGREDIENT_NAME,
                            MAX_LENGTH_MEASUREMENT_UNIT, MAX_LENGTH_RECIPE_NAME,
                            MAX_LENGTH_SHORT_LINK, MAX_LENGTH_TAG)
+from recipes.constants import (MIN_COOKING_TIME_AND_AMOUNT,
+                               MAX_COOKING_TIME_AND_AMOUNT)
 
 User = get_user_model()
 
@@ -23,8 +25,18 @@ class Recipe(models.Model):
     description = models.TextField(
         verbose_name='Описание',
     )
-    cooking_time = models.PositiveIntegerField(
-        verbose_name='Время приготовления(в минутах)'
+    cooking_time = models.PositiveSmallIntegerField(
+        verbose_name='Время приготовления(в минутах)',
+        validators=[
+            MinValueValidator(
+                MIN_COOKING_TIME_AND_AMOUNT,
+                message='Время приготовления должно быть больше 0.'
+            ),
+            MaxValueValidator(
+                MAX_COOKING_TIME_AND_AMOUNT,
+                message='Время приготовления не должно превышать 32 000 минут.'
+            )
+        ]
     )
     image = models.ImageField(
         verbose_name='Изображение',
@@ -44,7 +56,6 @@ class Recipe(models.Model):
     )
     tags = models.ManyToManyField(
         'Tag',
-        through='RecipeTag',
         verbose_name='Теги',
         related_name='recipes'
     )
@@ -71,9 +82,8 @@ class Recipe(models.Model):
             self.short_link = self.generate_unique_short_url()
         super().save(*args, **kwargs)
 
-    def generate_unique_short_url(self):
+    def generate_unique_short_url(self, length=MAX_LENGTH_SHORT_LINK):
         """Генератор коротких ссылок."""
-        length = MAX_LENGTH_SHORT_LINK
         while True:
             short_link = ''.join(
                 random.choices(string.ascii_letters + string.digits, k=length)
@@ -147,9 +157,18 @@ class RecipeIngredient(models.Model):
         related_name='recipeingredients',
         on_delete=models.CASCADE
     )
-    amount = models.PositiveIntegerField(
+    amount = models.PositiveSmallIntegerField(
         verbose_name='Количество',
-        validators=(MinValueValidator(1),)
+        validators=[
+            MinValueValidator(
+                MIN_COOKING_TIME_AND_AMOUNT,
+                message='Количество ингредиента должно быть больше 0.'
+            ),
+            MaxValueValidator(
+                MAX_COOKING_TIME_AND_AMOUNT,
+                message='Количество ингредиента не должно превышать 32 000.'
+            )
+        ]
     )
 
     class Meta:
@@ -215,15 +234,3 @@ class ShoppingList(models.Model):
                 name='unique_user_recipe',
             )
         ]
-
-
-class RecipeTag(models.Model):
-    """Промежуточная модель для связи рецептов и тегов."""
-    recipe = models.ForeignKey(
-        Recipe,
-        on_delete=models.CASCADE
-    )
-    tag = models.ForeignKey(
-        Tag,
-        on_delete=models.CASCADE
-    )

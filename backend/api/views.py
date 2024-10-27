@@ -125,9 +125,9 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         for ingredient in ingredients:
             shopping_list_text += (
-                f"{ingredient['ingredient__name']} "
-                f"({ingredient['ingredient__measurement_unit']}) - "
-                f"{ingredient['total_amount']}\n"
+                f'{ingredient["ingredient__name"]} '
+                f'({ingredient["ingredient__measurement_unit"]}) - '
+                f'{ingredient["total_amount"]}\n'
             )
 
         response = HttpResponse(shopping_list_text, content_type='text/plain')
@@ -140,12 +140,9 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def get_link(self, request, pk):
         """Получение короткой ссылки."""
         recipe = get_object_or_404(Recipe, id=pk)
-
-        if not recipe.short_link:
-            recipe.short_link = recipe.generate_unique_short_url()
-            recipe.save()
-
-        short_link = f"http://{request.get_host()}/s/{recipe.short_link}/"
+        recipe.short_link = recipe.generate_unique_short_url()
+        recipe.save()
+        short_link = f'http://{request.get_host()}/s/{recipe.short_link}/'
         return Response({'short-link': short_link}, status=status.HTTP_200_OK)
 
 
@@ -264,5 +261,5 @@ def redirect_short_link(request, short_url):
     """Метод для редиректа с короткой ссылки."""
     recipe = get_object_or_404(Recipe, short_link=short_url)
     host = get_current_site(request)
-    redirect_url = f"http://{host.domain}/recipes/{recipe.id}/"
+    redirect_url = f'http://{host.domain}/recipes/{recipe.id}/'
     return HttpResponseRedirect(redirect_url)

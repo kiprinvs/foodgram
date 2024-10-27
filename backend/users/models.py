@@ -36,13 +36,6 @@ class User(AbstractUser):
         blank=True,
         null=True,
     )
-    role = models.CharField(
-        max_length=MAX_LENGTH_NAME,
-        verbose_name='Роль',
-        choices=RoleChoice.choices,
-        default=RoleChoice.USER,
-        blank=True,
-    )
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
@@ -53,13 +46,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
-
-    @property
-    def is_admin(self):
-        return (
-            self.role == self.RoleChoice.ADMIN
-            or self.is_superuser
-        )
 
 
 class Subscribe(models.Model):

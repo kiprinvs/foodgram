@@ -98,14 +98,13 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
         """Проверка на наличие изображения."""
         if not value:
             raise serializers.ValidationError(
-                "Добавьте изображение рецепта."
+                'Добавьте изображение рецепта.'
             )
         return value
 
     def validate(self, data):
         ingredients = data.get('recipeingredients')
         tags = data.get('tags')
-        cooking_time = data.get('cooking_time')
 
         if not ingredients:
             raise serializers.ValidationError('Поле ingredients обязательное.')
@@ -123,11 +122,6 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
         if len(tags) != len(set(tags)):
             raise serializers.ValidationError(
                 'Теги не должны повторяться.'
-            )
-
-        if cooking_time <= 0:
-            raise serializers.ValidationError(
-                'Время приготовления должно быть больше 0.'
             )
 
         return data
@@ -153,7 +147,8 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
 
         return instance
 
-    def create_ingredients(self, recipe, ingredients_data):
+    @staticmethod
+    def create_ingredients(recipe, ingredients_data):
         recipe_ingredients = []
 
         for ingredient_data in ingredients_data:
@@ -287,16 +282,13 @@ class FavoriteSerializer(serializers.ModelSerializer):
         if Favorite.objects.filter(
             user=data['user'], recipe=data['recipe']
         ).exists():
-            raise serializers.ValidationError("Этот рецепт уже в избранном.")
+            raise serializers.ValidationError('Этот рецепт уже в избранном.')
         return data
 
     def to_representation(self, instance):
-        return {
-            'id': instance.recipe.id,
-            'name': instance.recipe.name,
-            'image': instance.recipe.image.url,
-            "cooking_time": instance.recipe.cooking_time
-        }
+        return RecipeSubscribeSerializer(
+            instance.recipe, context=self.context
+        ).data
 
 
 class ShoppingCartSerializer(serializers.ModelSerializer):
@@ -315,9 +307,6 @@ class ShoppingCartSerializer(serializers.ModelSerializer):
         return data
 
     def to_representation(self, instance):
-        return {
-            'id': instance.recipe.id,
-            'name': instance.recipe.name,
-            'image': instance.recipe.image.url,
-            "cooking_time": instance.recipe.cooking_time
-        }
+        return RecipeSubscribeSerializer(
+            instance.recipe, context=self.context
+        ).data
