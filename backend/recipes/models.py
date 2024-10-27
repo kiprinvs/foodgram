@@ -2,15 +2,15 @@ import random
 import string
 
 from django.contrib.auth import get_user_model
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import UniqueConstraint
 
 from api.constants import (MAX_LENGTH_INGREDIENT_NAME,
                            MAX_LENGTH_MEASUREMENT_UNIT, MAX_LENGTH_RECIPE_NAME,
                            MAX_LENGTH_SHORT_LINK, MAX_LENGTH_TAG)
-from recipes.constants import (MIN_COOKING_TIME_AND_AMOUNT,
-                               MAX_COOKING_TIME_AND_AMOUNT)
+from recipes.constants import (MAX_COOKING_TIME_AND_AMOUNT,
+                               MIN_COOKING_TIME_AND_AMOUNT)
 
 User = get_user_model()
 

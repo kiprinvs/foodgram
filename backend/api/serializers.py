@@ -47,6 +47,7 @@ class IngredientSerializer(serializers.ModelSerializer):
 
 
 class RecipeIngredientSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source='ingredient.id')
     name = serializers.CharField(
         source='ingredient.name', read_only=True
     )
@@ -142,7 +143,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
         instance.tags.clear()
         instance.tags.set(tags_data)
 
-        instance.recipeingredients.all().delete()
+        instance.ingredients.clear()
         self.create_ingredients(instance, ingredients_data)
 
         return instance
