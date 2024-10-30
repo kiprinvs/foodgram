@@ -140,8 +140,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def get_link(self, request, pk):
         """Получение короткой ссылки."""
         recipe = get_object_or_404(Recipe, id=pk)
-        recipe.short_link = recipe.generate_unique_short_url()
-        recipe.save()
         short_link = f'http://{request.get_host()}/s/{recipe.short_link}/'
         return Response({'short-link': short_link}, status=status.HTTP_200_OK)
 

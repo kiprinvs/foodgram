@@ -33,4 +33,4 @@ services:
       - static:/static
       - media:/app/media/
     ports:
-      - 8000:80 
+      - 8000:80

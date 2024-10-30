@@ -9,8 +9,8 @@ from django.db.models import UniqueConstraint
 from api.constants import (MAX_LENGTH_INGREDIENT_NAME,
                            MAX_LENGTH_MEASUREMENT_UNIT, MAX_LENGTH_RECIPE_NAME,
                            MAX_LENGTH_SHORT_LINK, MAX_LENGTH_TAG)
-from recipes.constants import (MAX_COOKING_TIME_AND_AMOUNT,
-                               MIN_COOKING_TIME_AND_AMOUNT)
+from recipes.constants import (MAX_AMOUNT, MAX_COOKING_TIME, MIN_AMOUNT,
+                               MIN_COOKING_TIME)
 
 User = get_user_model()
 
@@ -29,13 +29,14 @@ class Recipe(models.Model):
         verbose_name='Время приготовления(в минутах)',
         validators=[
             MinValueValidator(
-                MIN_COOKING_TIME_AND_AMOUNT,
-                message='Время приготовления должно быть больше 0.'
+                MIN_COOKING_TIME,
+                message='Время приготовления должно быть не менее '
+                f'{MIN_COOKING_TIME} минуты.'
             ),
             MaxValueValidator(
-                MAX_COOKING_TIME_AND_AMOUNT,
+                MAX_COOKING_TIME,
                 message='Время приготовления не должно превышать '
-                f'{MAX_COOKING_TIME_AND_AMOUNT} минут.'
+                f'{MAX_COOKING_TIME} минут.'
             )
         ]
     )
@@ -162,14 +163,14 @@ class RecipeIngredient(models.Model):
         verbose_name='Количество',
         validators=[
             MinValueValidator(
-                MIN_COOKING_TIME_AND_AMOUNT,
+                MIN_AMOUNT,
                 message='Количество ингредиента должно быть больше '
-                f'{MIN_COOKING_TIME_AND_AMOUNT}.'
+                f'{MIN_AMOUNT}.'
             ),
             MaxValueValidator(
-                MAX_COOKING_TIME_AND_AMOUNT,
+                MAX_AMOUNT,
                 message='Количество ингредиента не должно превышать '
-                f'{MAX_COOKING_TIME_AND_AMOUNT}.'
+                f'{MAX_AMOUNT}.'
             )
         ]
     )
