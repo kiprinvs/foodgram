@@ -111,3 +111,7 @@ http://localhost/api/recipes/
     "cooking_time": 1
 }
 ```
+
+### Авторство
+
+- **Киприн Вячеслав**: [GitHub](https://github.com/kiprinvs)
