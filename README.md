@@ -114,4 +114,4 @@ http://localhost/api/recipes/
 
 ### Авторство
 
-- **Киприн Вячеслав**: [GitHub](https://github.com/kiprinvs)
+- **[Киприн Вячеслав](https://github.com/kiprinvs)**
